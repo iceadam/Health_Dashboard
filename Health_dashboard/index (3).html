@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IoT Health Monitoring Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.3/Chart.min.js"></script>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 0;
+        }
+        h1 {
+            margin-top: 20px;
+            color: #007bff;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+        }
+        table {
+            margin-top: 20px;
+        }
+        .indicator {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 10px;
+        }
+        .chart-container {
+            margin: 20px 0;
+        }
+        footer {
+            margin-top: 20px;
+            text-align: center;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center">IoT Health Monitoring Dashboard</h1>
+
+        <!-- Real-Time Sensor Data -->
+        <h3 class="mt-4">Real-Time Sensor Data</h3>
+        <table class="table table-striped table-bordered">
+            <thead class="thead-dark">
+                <tr>
+                    <th>Sensor</th>
+                    <th>Status</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Body Temperature (DS18B20)</td>
+                    <td><span id="indicatorBodyTemp" class="indicator"></span><span id="statusBodyTemp">--</span></td>
+                    <td id="valueBodyTemp">-- °C</td>
+                </tr>
+                <tr>
+                    <td>Ambient Temperature (NTC)</td>
+                    <td><span id="indicatorAmbientTemp" class="indicator"></span><span id="statusAmbientTemp">--</span></td>
+                    <td id="valueAmbientTemp">-- °C</td>
+                </tr>
+                <tr>
+                    <td>Movement (MPU)</td>
+                    <td><span id="indicatorMovement" class="indicator"></span><span id="statusMovement">--</span></td>
+                    <td id="valueMovement">--</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Historical Data Chart -->
+        <h3 class="mt-4">Historical Data Chart</h3>
+        <div class="chart-container">
+            <canvas id="sensorChart"></canvas>
+        </div>
+
+        <!-- Blue LED Control -->
+        <h3 class="mt-4">Blue LED Control</h3>
+        <div class="form-group">
+            <label for="blueLedControl">Turn Blue LED:</label>
+            <select id="blueLedControl" class="form-control" onchange="toggleBlueLed()">
+                <option value="off">OFF</option>
+                <option value="on">ON</option>
+            </select>
+        </div>
+    </div>
+
+    <footer>
+        &copy; 2024 IoT Health Monitoring Dashboard
+    </footer>
+
+    <script>
+        // Initialize the chart
+        const ctx = document.getElementById('sensorChart').getContext('2d');
+        const sensorChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // Timestamps
+                datasets: [
+                    {
+                        label: 'Body Temperature (°C)',
+                        data: [],
+                        borderColor: 'red',
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        fill: true
+                    },
+                    {
+                        label: 'Ambient Temperature (°C)',
+                        data: [],
+                        borderColor: 'blue',
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        fill: true
+                    },
+                    {
+                        label: 'Movement',
+                        data: [],
+                        borderColor: 'green',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Timestamp'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Value'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Fetch real-time sensor data
+        async function fetchSensorData() {
+    try {
+        const response = await fetch('http://127.0.0.1:3000/sensorData');
+        if (!response.ok) {
+            throw new Error('Failed to fetch sensor data');
+        }
+        const data = await response.json();
+
+        // Update real-time data display
+        updateSensorStatus('indicatorBodyTemp', 'statusBodyTemp', 'valueBodyTemp', data.bodyTemp, '°C');
+        updateSensorStatus('indicatorAmbientTemp', 'statusAmbientTemp', 'valueAmbientTemp', data.ambientTemp, '°C');
+
+        // Update Movement with magnitude
+        if (data.movement) {
+            const movementValue = `Magnitude: ${data.movement.magnitude}`;
+            updateSensorStatus('indicatorMovement', 'statusMovement', 'valueMovement', { value: movementValue, status: data.movement.status }, '');
+        }
+    } catch (error) {
+        console.error('Error fetching sensor data:', error);
+    }
+}
+
+        // Helper function to update sensor status
+        function updateSensorStatus(indicatorId, statusId, valueId, sensorData, unit) {
+            const indicatorElement = document.getElementById(indicatorId);
+            const statusElement = document.getElementById(statusId);
+            const valueElement = document.getElementById(valueId);
+
+            if (sensorData && sensorData.value !== null) {
+                valueElement.textContent = `${sensorData.value} ${unit}`;
+                statusElement.textContent = sensorData.status;
+                if (sensorData.status === "Alert") {
+                    statusElement.style.color = 'red';
+                    indicatorElement.style.backgroundColor = 'red';
+                } else {
+                    statusElement.style.color = 'green';
+                    indicatorElement.style.backgroundColor = 'green';
+                }
+            } else {
+                valueElement.textContent = '--';
+                statusElement.textContent = 'No Data';
+                statusElement.style.color = 'gray';
+                indicatorElement.style.backgroundColor = 'gray';
+            }
+        }
+
+        // Fetch historical data for the chart
+        async function fetchHistoricalData() {
+            try {
+                const response = await fetch('http://127.0.0.1:3000/historicalData');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch historical data');
+                }
+                const data = await response.json();
+
+                // Clear existing data
+                sensorChart.data.labels = [];
+                sensorChart.data.datasets[0].data = []; // Body Temperature
+                sensorChart.data.datasets[1].data = []; // Ambient Temperature
+                sensorChart.data.datasets[2].data = []; // Movement
+
+                // Update chart with fetched data
+                data.forEach(entry => {
+                    sensorChart.data.labels.push(entry.timestamp);
+                    sensorChart.data.datasets[0].data.push(entry.bodyTemp);
+                    sensorChart.data.datasets[1].data.push(entry.ambientTemp);
+                    sensorChart.data.datasets[2].data.push(entry.movement);
+                });
+
+                sensorChart.update();
+            } catch (error) {
+                console.error('Error fetching historical data:', error);
+            }
+        }
+
+        // Function to toggle the blue LED
+        // Function to toggle the blue LED
+async function toggleBlueLed() {
+    const ledState = document.getElementById('blueLedControl').value; // Get the selected LED state
+    try {
+        const response = await fetch('http://127.0.0.1:3000/controlBlueLed', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json', // Proper header for JSON data
+            },
+            body: JSON.stringify({ state: ledState }), // Send the state as JSON
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to control Blue LED');
+        }
+
+        const result = await response.json(); // Parse server response
+        alert(result.message); // Display success message
+    } catch (error) {
+        console.error('Error controlling Blue LED:', error);
+    }
+}
+
+
+        // Periodic updates
+        setInterval(fetchSensorData, 3000); // Fetch real-time data every 3 seconds
+        setInterval(fetchHistoricalData, 5000); // Fetch historical data every 5 seconds
+    </script>
+</body>
+</html>
